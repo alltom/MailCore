@@ -30,6 +30,7 @@
  */
 
 #import <libetpan/libetpan.h>
+#import <libetpan/xgmthrid.h>
 #import "CTCoreMessage.h"
 #import "CTCoreFolder.h"
 #import "MailCoreTypes.h"
@@ -675,6 +676,40 @@
     }
     mailimap_msg_att_rfc822_free(result);
     return [nsresult autorelease];
+}
+
+- (NSString *)threadID {
+    struct mailimap_set *set = mailimap_set_new_single([self sequenceNumber]);
+    clist * fetch_result;
+    int r = mailimap_fetch_xgmthrid([self imapSession], set, &fetch_result);
+    
+    if (r != MAIL_NO_ERROR) {
+        self.lastError = MailCoreCreateErrorFromIMAPCode(r);
+        return nil;
+    }
+    
+    mailimap_set_free(set);
+    
+    uint64_t thread_id = 0;
+    
+    clistiter * cur;
+    for(cur = clist_begin([self imapSession]->imap_response_info->rsp_extension_list) ; cur != NULL ; cur = clist_next(cur)) {
+        struct mailimap_extension_data * ext_data;
+        
+        ext_data = clist_content(cur);
+        if (ext_data->ext_extension->ext_id != MAILIMAP_EXTENSION_XGMTHRID || ext_data->ext_type != 0/*MAILIMAP_XGMTHRID_TYPE_THRID*/ || ext_data->ext_data == NULL) {
+            continue;
+        }
+        
+        thread_id = *(uint64_t *)ext_data->ext_data;
+        break;
+    }
+    
+    if (thread_id > 0) {
+        return [NSString stringWithFormat:@"%llx", thread_id];
+    }
+    
+    return nil;
 }
 
 - (struct mailmessage *)messageStruct {

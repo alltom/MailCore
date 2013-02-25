@@ -326,6 +326,12 @@
  */
 - (NSString *)rfc822Header;
 
+/**
+ Fetches X-GM-THRID from the server
+ @return Returns nil on error. Call method lastError to get error if one occurred.
+*/
+- (NSString *)threadID;
+
 /* Intended for advanced use only */
 - (struct mailmessage *)messageStruct;
 - (mailimap *)imapSession;
