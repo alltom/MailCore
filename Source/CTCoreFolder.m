@@ -627,6 +627,67 @@ static const int MAX_PATH_SIZE = 1024;
     return messages;
 }
 
+- (NSSet *)uidsOfUnreadMessages {
+    BOOL success = [self connect];
+    if (!success) {
+        return nil;
+    }
+    
+    int r;
+    struct mailimap_search_key * search_key;
+    clist * fetch_result;
+    // this is ridiculous, but it's the API apparently
+    search_key = mailimap_search_key_new(MAILIMAP_SEARCH_KEY_UNSEEN,
+                                         NULL, NULL, NULL, NULL, NULL,
+                                         NULL, NULL, NULL, NULL, NULL,
+                                         NULL, NULL, NULL, NULL, 0,
+                                         NULL, NULL, NULL, NULL, NULL,
+                                         NULL, 0, NULL, NULL, NULL);
+    if (search_key == NULL) {
+        return nil;
+    }
+    
+    r = mailimap_uid_search([self imapSession], NULL, search_key, &fetch_result);
+    
+    mailimap_search_key_free(search_key);
+    
+    if (r != MAIL_NO_ERROR) {
+        self.lastError = MailCoreCreateErrorFromIMAPCode(r);
+        return nil;
+    }
+    
+    NSMutableSet *set = [NSMutableSet setWithCapacity:clist_count(fetch_result)];
+    clistiter *iter;
+    for(iter = clist_begin(fetch_result); iter != NULL; iter = clist_next(iter)) {
+        uint32_t *uid = clist_content(iter);
+        [set addObject:@(*uid)];
+    }
+    return set;
+}
+
+
+-(NSArray *) messageObjectsWithUIDs:(NSSet *) uids withFetchAttributes:(CTFetchAttributes)attrs {
+    BOOL success = [self connect];
+    if (!success) {
+        return nil;
+    }
+
+    struct mailimap_set *uid_set = mailimap_set_new_empty();
+    if (uid_set == nil) {
+        return nil;
+    }
+    
+    for (NSNumber *boxedUid in uids) {
+        int r = mailimap_set_add_single(uid_set, [boxedUid unsignedIntegerValue]);
+        if (r != MAILIMAP_NO_ERROR) {
+            mailimap_set_free(uid_set);
+            return nil;
+        }
+    }
+    
+    return [self messagesForSet:uid_set fetchAttributes:attrs uidFetch:YES];
+}
+
 - (NSArray *)messagesFromSequenceNumber:(NSUInteger)startNum to:(NSUInteger)endNum withFetchAttributes:(CTFetchAttributes)attrs {
     struct mailimap_set *set = mailimap_set_new_interval(startNum, endNum);
     NSArray *results = [self messagesForSet:set fetchAttributes:attrs uidFetch:NO];
